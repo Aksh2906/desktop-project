@@ -1,0 +1,10 @@
+# Extra dependencies for server.py
+# (mediapipe, tensorflow, opencv, joblib already installed from your project)
+
+websockets>=12.0
+
+# Windows OS controls
+pycaw>=20181226
+comtypes>=1.2.0
+screen-brightness-control>=0.22.0
+pyautogui>=0.9.54

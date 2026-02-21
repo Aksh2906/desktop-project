@@ -1,0 +1,1523 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>GestureOS — Desktop Gesture Control</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #080c10;
+    --surface: #0d1218;
+    --card: #111820;
+    --border: #1e2d3d;
+    --accent: #00e5ff;
+    --accent2: #ff3d71;
+    --accent3: #a855f7;
+    --text: #e8f4fd;
+    --muted: #4a6070;
+    --success: #00ff88;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image:
+      linear-gradient(rgba(0,229,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,229,255,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none; z-index: 0;
+  }
+
+  body::after {
+    content: '';
+    position: fixed; top: -50%; left: -20%;
+    width: 600px; height: 600px;
+    background: radial-gradient(circle, rgba(168,85,247,0.08) 0%, transparent 60%);
+    pointer-events: none; z-index: 0;
+    animation: orb 10s ease-in-out infinite alternate;
+  }
+
+  @keyframes orb {
+    from { transform: translate(0,0); }
+    to { transform: translate(200px, 150px); }
+  }
+
+  /* ── HEADER ── */
+  header {
+    position: relative; z-index: 10;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 18px 32px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(8,12,16,0.85);
+    backdrop-filter: blur(20px);
+  }
+
+  .logo {
+    font-family: 'Syne', sans-serif;
+    font-size: 22px; font-weight: 800; letter-spacing: -0.5px;
+    display: flex; align-items: center; gap: 10px;
+  }
+
+  .logo-dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--accent); box-shadow: 0 0 12px var(--accent);
+    animation: pulseDot 2s ease-in-out infinite;
+  }
+
+  @keyframes pulseDot {
+    0%,100% { transform: scale(1); box-shadow: 0 0 12px var(--accent); }
+    50% { transform: scale(1.4); box-shadow: 0 0 24px var(--accent); }
+  }
+
+  .header-status {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 11px; color: var(--muted);
+  }
+
+  .status-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--muted); transition: all 0.3s;
+  }
+  .status-dot.live {
+    background: var(--success);
+    box-shadow: 0 0 8px var(--success);
+    animation: pulseDot 1.5s infinite;
+  }
+
+  .header-actions { display: flex; gap: 10px; }
+
+  .btn {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px; padding: 7px 16px;
+    border-radius: 6px; border: 1px solid var(--border);
+    background: transparent; color: var(--text);
+    cursor: pointer; transition: all 0.2s; letter-spacing: 0.5px;
+  }
+  .btn:hover { border-color: var(--accent); color: var(--accent); background: rgba(0,229,255,0.05); }
+  .btn-primary { background: var(--accent); color: var(--bg); border-color: var(--accent); font-weight: 500; }
+  .btn-primary:hover { background: #00c4e0; box-shadow: 0 0 20px rgba(0,229,255,0.3); }
+
+  /* ── LAYOUT ── */
+  .app-layout {
+    position: relative; z-index: 1;
+    display: grid;
+    grid-template-columns: 1fr 420px;
+    grid-template-rows: 1fr auto;
+    height: calc(100vh - 61px);
+  }
+
+  /* ── LEFT ── */
+  .camera-panel {
+    padding: 24px;
+    display: flex; flex-direction: column; gap: 20px;
+    overflow-y: auto;
+  }
+  .camera-panel::-webkit-scrollbar { width: 4px; }
+  .camera-panel::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .camera-wrap {
+    position: relative;
+    background: var(--card);
+    border: 1px solid var(--border); border-radius: 12px;
+    overflow: hidden; aspect-ratio: 16/9; flex-shrink: 0;
+  }
+
+  #videoEl {
+    width: 100%; height: 100%;
+    object-fit: cover; display: block;
+    transform: scaleX(-1);
+  }
+
+  .camera-off-overlay {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 16px;
+    background: var(--card);
+  }
+  .camera-off-overlay p { color: var(--muted); font-size: 12px; }
+
+  .cam-hud { position: absolute; inset: 0; pointer-events: none; }
+
+  .hud-corner {
+    position: absolute; width: 24px; height: 24px;
+    border-color: var(--accent); border-style: solid; opacity: 0.7;
+  }
+  .hud-corner.tl { top:12px; left:12px; border-width:2px 0 0 2px; border-radius:3px 0 0 0; }
+  .hud-corner.tr { top:12px; right:12px; border-width:2px 2px 0 0; border-radius:0 3px 0 0; }
+  .hud-corner.bl { bottom:12px; left:12px; border-width:0 0 2px 2px; border-radius:0 0 0 3px; }
+  .hud-corner.br { bottom:12px; right:12px; border-width:0 2px 2px 0; border-radius:0 0 3px 0; }
+
+  .cam-label {
+    position: absolute; top:12px; left:50%; transform: translateX(-50%);
+    background: rgba(0,0,0,0.55); border: 1px solid var(--border);
+    padding: 3px 12px; border-radius: 20px;
+    font-size: 10px; color: var(--muted); backdrop-filter: blur(8px);
+  }
+
+  .cam-rec {
+    position: absolute; top:12px; right:40px;
+    display: none; align-items: center; gap:5px;
+    font-size: 9px; color: var(--accent2); font-weight: 500;
+  }
+
+  .cam-fps { position: absolute; bottom:12px; right:12px; font-size: 10px; color: var(--muted); }
+
+  .scan-line {
+    position: absolute; left:0; right:0; height:2px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    top:0; animation: scanAnim 3s linear infinite; opacity:0.5; display:none;
+  }
+  @keyframes scanAnim { from{top:0} to{top:100%} }
+
+  /* Detection cards */
+  .detection-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+  .detect-card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 10px; padding: 18px; position: relative; overflow: hidden;
+    transition: border-color 0.3s, box-shadow 0.3s;
+  }
+  .detect-card.active { border-color: var(--accent); box-shadow: 0 0 20px rgba(0,229,255,0.1); }
+  .detect-card::before {
+    content: ''; position: absolute; top:0; left:0; right:0; height:2px;
+    background: linear-gradient(90deg, var(--accent), var(--accent3));
+    opacity:0; transition: opacity 0.3s;
+  }
+  .detect-card.active::before { opacity:1; }
+
+  .detect-label {
+    font-size: 9px; color: var(--muted);
+    letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 10px;
+  }
+  .detect-value {
+    font-family: 'Syne', sans-serif; font-size: 15px; font-weight: 700; line-height: 1.3;
+  }
+
+  .confidence-bar { margin-top: 10px; height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; }
+  .confidence-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--accent3));
+    border-radius: 2px; transition: width 0.4s ease; width: 0%;
+  }
+  .confidence-text { margin-top: 5px; font-size: 10px; color: var(--muted); }
+
+  /* Control trigger */
+  .control-trigger {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 10px; padding: 18px;
+    display: flex; align-items: center; gap: 16px;
+    transition: all 0.3s;
+  }
+  .control-trigger.firing {
+    border-color: var(--success); box-shadow: 0 0 30px rgba(0,255,136,0.15);
+  }
+
+  .ctrl-icon-box {
+    width: 52px; height: 52px; border-radius: 10px;
+    background: var(--surface); border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 24px; flex-shrink: 0; overflow: hidden; transition: all 0.3s;
+  }
+  .control-trigger.firing .ctrl-icon-box {
+    background: rgba(0,255,136,0.08); border-color: var(--success);
+    box-shadow: 0 0 16px rgba(0,255,136,0.3);
+  }
+  .ctrl-icon-box img { width:100%; height:100%; object-fit:cover; }
+
+  .control-info { flex: 1; min-width: 0; }
+  .control-name { font-family: 'Syne', sans-serif; font-size: 15px; font-weight: 600; margin-bottom: 3px; }
+  .control-desc { font-size: 10px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  .ctrl-status-badge { font-size: 10px; flex-shrink: 0; letter-spacing: 1px; }
+  .ctrl-status-badge.idle { color: var(--muted); }
+  .ctrl-status-badge.firing { color: var(--success); }
+
+  /* ── RIGHT PANEL ── */
+  .right-panel {
+    border-left: 1px solid var(--border);
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+
+  .panel-header {
+    padding: 18px 20px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    flex-shrink: 0;
+  }
+  .panel-title { font-family: 'Syne', sans-serif; font-size: 14px; font-weight: 700; }
+  .panel-count {
+    font-size: 10px; color: var(--muted);
+    background: var(--surface); padding: 3px 8px;
+    border-radius: 20px; border: 1px solid var(--border);
+  }
+
+  .gesture-list {
+    flex: 1; overflow-y: auto; padding: 12px;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .gesture-list::-webkit-scrollbar { width: 4px; }
+  .gesture-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .gesture-item {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 12px;
+    display: flex; align-items: center; gap: 12px;
+    transition: all 0.2s; cursor: pointer;
+  }
+  .gesture-item:hover { border-color: var(--accent); background: rgba(0,229,255,0.03); }
+  .gesture-item.active-gesture {
+    border-color: var(--accent); background: rgba(0,229,255,0.06);
+    box-shadow: 0 0 12px rgba(0,229,255,0.1);
+  }
+
+  /* ── Image thumbnail ── */
+  .gesture-thumb {
+    width: 46px; height: 46px; border-radius: 7px;
+    background: var(--surface); border: 1px solid var(--border);
+    flex-shrink: 0; overflow: hidden;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .gesture-thumb img { width:100%; height:100%; object-fit:cover; }
+  .thumb-placeholder {
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 2px;
+    width: 100%; height: 100%;
+    opacity: 0.45;
+  }
+  .thumb-placeholder span { font-size: 7px; color: var(--muted); letter-spacing: 0.5px; }
+
+  .gesture-info { flex: 1; min-width: 0; }
+  .gesture-n {
+    font-size: 12px; font-weight: 500; margin-bottom: 3px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .gesture-ctrl { font-size: 10px; color: var(--muted); display: flex; align-items: center; gap: 5px; }
+  .ctrl-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
+
+  .gesture-actions { display: flex; gap: 4px; flex-shrink: 0; align-items: center; }
+
+  .icon-btn {
+    width: 28px; height: 28px; border-radius: 5px;
+    border: 1px solid transparent; background: transparent;
+    color: var(--muted); cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s;
+  }
+  .icon-btn.edit-btn:hover { border-color: var(--accent); color: var(--accent); background: rgba(0,229,255,0.08); }
+  .icon-btn.del-btn:hover { border-color: var(--accent2); color: var(--accent2); background: rgba(255,61,113,0.08); }
+
+  .toggle-switch { position: relative; width: 32px; height: 18px; flex-shrink: 0; }
+  .toggle-switch input { display: none; }
+  .toggle-track {
+    position: absolute; inset: 0; background: var(--border);
+    border-radius: 9px; cursor: pointer; transition: background 0.2s;
+  }
+  .toggle-track::after {
+    content: ''; position: absolute;
+    width: 12px; height: 12px; border-radius: 50%;
+    background: var(--muted); top: 3px; left: 3px; transition: all 0.2s;
+  }
+  .toggle-switch input:checked + .toggle-track { background: rgba(0,229,255,0.2); }
+  .toggle-switch input:checked + .toggle-track::after {
+    left: 17px; background: var(--accent); box-shadow: 0 0 6px var(--accent);
+  }
+
+  .add-gesture-btn {
+    margin: 12px; padding: 12px;
+    border: 1px dashed var(--border); border-radius: 8px;
+    background: transparent; color: var(--muted);
+    font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;
+    transition: all 0.2s; flex-shrink: 0;
+  }
+  .add-gesture-btn:hover { border-color: var(--accent); color: var(--accent); background: rgba(0,229,255,0.04); }
+
+  /* ── MODAL ── */
+  .modal-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.75);
+    z-index: 100; display: flex; align-items: center; justify-content: center;
+    backdrop-filter: blur(6px);
+    opacity: 0; pointer-events: none; transition: opacity 0.25s;
+  }
+  .modal-overlay.open { opacity: 1; pointer-events: all; }
+
+  .modal {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 16px; width: 500px; max-width: 95vw; max-height: 90vh;
+    overflow-y: auto; padding: 28px; position: relative;
+    transform: translateY(16px) scale(0.97); transition: transform 0.25s;
+  }
+  .modal::-webkit-scrollbar { width: 4px; }
+  .modal::-webkit-scrollbar-thumb { background: var(--border); }
+  .modal-overlay.open .modal { transform: none; }
+
+  .modal-title { font-family: 'Syne', sans-serif; font-size: 18px; font-weight: 700; margin-bottom: 4px; }
+  .modal-sub { font-size: 11px; color: var(--muted); margin-bottom: 24px; }
+
+  .modal-close-x {
+    position: absolute; top: 20px; right: 20px;
+    background: transparent; border: none;
+    color: var(--muted); font-size: 18px; cursor: pointer; transition: color 0.15s;
+  }
+  .modal-close-x:hover { color: var(--text); }
+
+  .form-group { margin-bottom: 18px; }
+  .form-label {
+    font-size: 10px; color: var(--muted);
+    letter-spacing: 1px; text-transform: uppercase;
+    margin-bottom: 7px; display: block;
+  }
+
+  .form-input, .form-select {
+    width: 100%; background: var(--surface);
+    border: 1px solid var(--border); border-radius: 7px;
+    padding: 10px 14px; color: var(--text);
+    font-family: 'JetBrains Mono', monospace; font-size: 12px;
+    outline: none; transition: border-color 0.2s;
+  }
+  .form-input:focus, .form-select:focus { border-color: var(--accent); }
+  .form-select option { background: var(--card); }
+
+  /* Image upload */
+  .img-upload-zone {
+    border: 1px dashed var(--border); border-radius: 9px;
+    background: var(--surface); position: relative; overflow: hidden;
+    display: flex; align-items: center; gap: 16px; padding: 14px;
+    cursor: pointer; transition: all 0.2s;
+  }
+  .img-upload-zone:hover { border-color: var(--accent); background: rgba(0,229,255,0.04); }
+
+  .img-upload-zone input[type=file] {
+    position: absolute; inset: 0; opacity: 0; cursor: pointer;
+  }
+
+  .img-preview-thumb {
+    width: 64px; height: 64px; border-radius: 8px;
+    background: var(--card); border: 1px solid var(--border);
+    overflow: hidden; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .img-preview-thumb img { width:100%; height:100%; object-fit:cover; }
+
+  .img-upload-copy { flex:1; }
+  .img-upload-copy strong { font-size: 12px; display:block; margin-bottom: 4px; }
+  .img-upload-copy span { font-size: 10px; color: var(--muted); }
+
+  .img-clear-btn {
+    font-size: 10px; color: var(--accent2);
+    background: transparent; border: 1px solid rgba(255,61,113,0.4);
+    border-radius: 4px; padding: 4px 9px; cursor: pointer;
+    transition: all 0.15s; position: relative; z-index: 2; flex-shrink: 0;
+  }
+  .img-clear-btn:hover { background: rgba(255,61,113,0.1); }
+
+  .ctrl-params { margin-top: 12px; display: none; }
+  .ctrl-params.visible { display: block; }
+
+  .modal-footer {
+    display: flex; gap: 10px; justify-content: flex-end; margin-top: 24px;
+  }
+
+  /* Status bar */
+  .status-bar {
+    grid-column: 1/-1;
+    border-top: 1px solid var(--border);
+    padding: 8px 24px;
+    display: flex; align-items: center; gap: 24px;
+    font-size: 10px; color: var(--muted);
+    background: rgba(8,12,16,0.9); backdrop-filter: blur(10px);
+    position: relative; z-index: 1;
+  }
+  .status-item { display: flex; align-items: center; gap: 6px; }
+  .status-item span { color: var(--text); }
+
+  .ct-web { background: #00e5ff; }
+  .ct-app { background: #a855f7; }
+  .ct-sound { background: #00ff88; }
+  .ct-brightness { background: #ffb347; }
+  .ct-wallpaper { background: #ff3d71; }
+  .ct-custom { background: #c084fc; }
+
+  /* ── WS indicator ── */
+  .ws-dot {
+    display: inline-block; width: 7px; height: 7px;
+    border-radius: 50%; background: var(--muted);
+    margin-right: 5px; transition: all 0.3s;
+  }
+  .ws-dot.connected { background: var(--success); box-shadow: 0 0 6px var(--success); }
+  .ws-dot.error     { background: var(--accent2); }
+
+  /* ── Recording overlay on camera ── */
+  .record-overlay {
+    position: absolute; inset: 0;
+    border: 3px solid var(--accent2);
+    border-radius: 12px; pointer-events: none;
+    display: none; z-index: 5;
+    animation: recBlink 1s ease-in-out infinite;
+  }
+  .record-overlay.active { display: block; }
+  @keyframes recBlink {
+    0%,100% { border-color: var(--accent2); box-shadow: inset 0 0 30px rgba(255,61,113,0.15); }
+    50%     { border-color: rgba(255,61,113,0.3); box-shadow: none; }
+  }
+
+  .record-hud {
+    position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%);
+    background: rgba(0,0,0,0.75); border: 1px solid var(--accent2);
+    padding: 6px 16px; border-radius: 20px;
+    display: none; align-items: center; gap: 10px;
+    font-size: 11px; z-index: 6; backdrop-filter: blur(8px);
+  }
+  .record-hud.active { display: flex; }
+
+  .rec-progress-bar {
+    width: 120px; height: 4px; background: rgba(255,255,255,0.15);
+    border-radius: 2px; overflow: hidden;
+  }
+  .rec-progress-fill {
+    height: 100%; background: var(--accent2);
+    border-radius: 2px; transition: width 0.2s ease; width: 0%;
+  }
+
+  /* ── Training panel ── */
+  .train-panel {
+    margin: 0 12px 12px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 14px; flex-shrink: 0;
+  }
+  .train-panel-title {
+    font-size: 10px; color: var(--muted);
+    letter-spacing: 1px; text-transform: uppercase; margin-bottom: 10px;
+  }
+  .train-data-list {
+    display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px;
+    max-height: 100px; overflow-y: auto;
+  }
+  .train-data-row {
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 10px;
+  }
+  .train-data-name { color: var(--text); }
+  .train-data-count { color: var(--accent); }
+  .train-data-empty { font-size: 10px; color: var(--muted); text-align: center; padding: 6px 0; }
+  .train-actions { display: flex; gap: 8px; }
+  .train-btn {
+    flex: 1; font-family: 'JetBrains Mono', monospace;
+    font-size: 10px; padding: 7px 10px;
+    border-radius: 6px; border: 1px solid var(--border);
+    background: transparent; color: var(--text); cursor: pointer;
+    transition: all 0.2s; letter-spacing: 0.3px;
+  }
+  .train-btn:hover { border-color: var(--accent3); color: var(--accent3); background: rgba(168,85,247,0.07); }
+  .train-btn.primary {
+    background: var(--accent3); color: #fff; border-color: var(--accent3);
+  }
+  .train-btn.primary:hover { background: #9333ea; box-shadow: 0 0 16px rgba(168,85,247,0.3); }
+  .train-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* ── Record button on gesture items ── */
+  .icon-btn.rec-btn:hover { border-color: var(--accent2); color: var(--accent2); background: rgba(255,61,113,0.08); }
+  .icon-btn.rec-btn.recording-active {
+    border-color: var(--accent2); color: var(--accent2);
+    background: rgba(255,61,113,0.12);
+    animation: recBtnPulse 1s ease-in-out infinite;
+  }
+  @keyframes recBtnPulse {
+    0%,100% { box-shadow: 0 0 0 0 rgba(255,61,113,0.4); }
+    50%     { box-shadow: 0 0 0 4px rgba(255,61,113,0); }
+  }
+
+  /* Record frame count input */
+  .record-count-input {
+    width: 70px; background: var(--surface);
+    border: 1px solid var(--border); border-radius: 5px;
+    padding: 5px 8px; color: var(--text);
+    font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    outline: none; transition: border-color 0.2s;
+  }
+  .record-count-input:focus { border-color: var(--accent); }
+
+  /* Toast */
+  .toast-container {
+    position: fixed; bottom: 24px; right: 24px;
+    z-index: 200; display: flex; flex-direction: column; gap: 8px;
+  }
+  .toast {
+    background: var(--card); border: 1px solid var(--border);
+    border-left: 3px solid var(--accent); border-radius: 8px;
+    padding: 12px 16px; font-size: 11px; min-width: 200px;
+    animation: toastIn 0.3s ease forwards;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .toast.success { border-left-color: var(--success); }
+  .toast.error { border-left-color: var(--accent2); }
+  @keyframes toastIn {
+    from { transform: translateX(40px); opacity: 0; }
+    to { transform: none; opacity: 1; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-dot"></div>
+    GestureOS
+  </div>
+  <div class="header-status">
+    <div class="status-dot" id="camStatusDot"></div>
+    <span id="camStatusText">Camera Off</span>
+  </div>
+  <div class="header-actions">
+    <span style="font-size:10px;color:var(--muted);display:flex;align-items:center;gap:5px;margin-right:4px">
+      <span class="ws-dot" id="wsDot"></span><span id="wsStatusText">Disconnected</span>
+    </span>
+    <button class="btn" id="toggleCamBtn" onclick="toggleCamera()">Start Camera</button>
+    <button class="btn btn-primary" onclick="openAddModal()">+ Add Gesture</button>
+  </div>
+</header>
+
+<div class="app-layout">
+
+  <!-- LEFT: Camera + Detection -->
+  <div class="camera-panel">
+
+    <div class="camera-wrap">
+      <video id="videoEl" autoplay muted playsinline></video>
+      <div class="cam-hud">
+        <div class="hud-corner tl"></div>
+        <div class="hud-corner tr"></div>
+        <div class="hud-corner bl"></div>
+        <div class="hud-corner br"></div>
+        <div class="cam-label" id="camLabel">AWAITING CAMERA</div>
+        <div class="cam-rec" id="camRec">
+          <div class="logo-dot" style="width:6px;height:6px"></div> LIVE
+        </div>
+        <div class="cam-fps" id="camFps"></div>
+      </div>
+      <div class="camera-off-overlay" id="camOffOverlay">
+        <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="#4a6070" stroke-width="1.5">
+          <path d="M23 7L16 12l7 5V7zM14 5H3a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2z"/>
+        </svg>
+        <p>Click "Start Camera" to begin</p>
+      </div>
+      <div class="scan-line" id="scanLine"></div>
+      <div class="record-overlay" id="recordOverlay"></div>
+      <div class="record-hud" id="recordHud">
+        <span style="color:var(--accent2);font-weight:500" id="recHudName">Recording…</span>
+        <div class="rec-progress-bar"><div class="rec-progress-fill" id="recProgressFill"></div></div>
+        <span style="color:var(--muted)" id="recHudCount">0 / 0</span>
+        <button class="btn btn-danger" style="padding:3px 10px;font-size:9px" onclick="stopRecording()">Stop</button>
+      </div>
+    </div>
+
+    <div class="detection-row">
+      <div class="detect-card" id="gestureCard">
+        <div class="detect-label">Detected Gesture</div>
+        <div class="detect-value" id="detectedGesture" style="color:var(--muted);font-size:13px">—</div>
+        <div class="confidence-bar"><div class="confidence-fill" id="confBar"></div></div>
+        <div class="confidence-text" id="confText">Confidence: 0%</div>
+      </div>
+      <div class="detect-card" id="handCard">
+        <div class="detect-label">Hand Tracking</div>
+        <div class="detect-value" id="handPos" style="font-size:13px;color:var(--muted)">No Hand</div>
+        <div style="margin-top:10px;font-size:10px;color:var(--muted)" id="handMeta">Status: Waiting</div>
+      </div>
+    </div>
+
+    <div class="control-trigger" id="controlTrigger">
+      <div class="ctrl-icon-box" id="ctrlIconBox">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#4a6070" stroke-width="1.5">
+          <circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/>
+        </svg>
+      </div>
+      <div class="control-info">
+        <div class="control-name" id="ctrlName">No Action</div>
+        <div class="control-desc" id="ctrlDesc">Waiting for gesture detection…</div>
+      </div>
+      <div class="ctrl-status-badge idle" id="ctrlStatus">IDLE</div>
+    </div>
+
+  </div>
+
+  <!-- RIGHT: Gesture Library -->
+  <div class="right-panel">
+    <div class="panel-header">
+      <div class="panel-title">Gesture Library</div>
+      <div class="panel-count" id="gestureCount">0 gestures</div>
+    </div>
+    <div class="gesture-list" id="gestureList"></div>
+    <button class="add-gesture-btn" onclick="openAddModal()">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+      </svg>
+      Add New Gesture
+    </button>
+
+    <!-- Training panel -->
+    <div class="train-panel">
+      <div class="train-panel-title" style="display:flex;justify-content:space-between;align-items:center">
+        <span>Training Data</span>
+        <span id="trainModelClasses" style="color:var(--muted);font-size:9px"></span>
+      </div>
+      <div class="train-data-list" id="modelInfoList">
+        <div class="train-data-empty">Add a gesture and click ● to record</div>
+      </div>
+      <div class="train-actions">
+        <button class="train-btn" id="trainBtn" onclick="triggerTrain()">⚡ Train Model</button>
+      </div>
+      <div id="trainStatus" style="margin-top:8px;font-size:10px;color:var(--muted);text-align:center;display:none"></div>
+    </div>
+  </div>
+
+  <!-- Hidden canvas for frame capture -->
+  <canvas id="captureCanvas" style="display:none"></canvas>
+
+  <div class="status-bar">
+    <div class="status-item">Model: <span id="modelStatus">Not Connected</span></div>
+    <div class="status-item">WS: <span>ws://localhost:8765</span></div>
+    <div class="status-item">Active: <span id="activeCount">0</span></div>
+    <div class="status-item">Last Trigger: <span id="lastTrigger">—</span></div>
+  </div>
+
+</div>
+
+<!-- MODAL -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <button class="modal-close-x" onclick="closeModal()">✕</button>
+    <div class="modal-title" id="modalTitle">Add Gesture</div>
+    <div class="modal-sub">Upload a reference image of your hand gesture, name it, and bind it to a desktop action</div>
+
+    <div class="form-group">
+      <label class="form-label">Gesture Name</label>
+      <input type="text" class="form-input" id="fName" placeholder="e.g. Open Palm, Two Fingers Up, Crossed Arms…" />
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Reference Image</label>
+      <div class="img-upload-zone" id="uploadZone">
+        <input type="file" accept="image/*" id="fImageFile" onchange="onImageSelected(event)" />
+        <div class="img-preview-thumb" id="imgPreviewThumb">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#4a6070" stroke-width="1.5">
+            <rect x="3" y="3" width="18" height="18" rx="2"/>
+            <circle cx="8.5" cy="8.5" r="1.5"/>
+            <polyline points="21,15 16,10 5,21"/>
+          </svg>
+        </div>
+        <div class="img-upload-copy">
+          <strong id="imgUploadTitle">Click to upload gesture photo</strong>
+          <span>PNG or JPG — stored as thumbnail in library</span>
+        </div>
+        <button class="img-clear-btn" id="imgClearBtn" style="display:none" onclick="clearImage(event)">Remove</button>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Control Type</label>
+      <select class="form-select" id="fCtrlType" onchange="onCtrlTypeChange()">
+        <option value="">— Select control —</option>
+        <option value="open_webpage">🌐  Open Webpage</option>
+        <option value="open_app">📦  Open Application</option>
+        <option value="volume_up">🔊  Volume Up</option>
+        <option value="volume_down">🔉  Volume Down</option>
+        <option value="mute">🔇  Mute / Unmute</option>
+        <option value="brightness_up">☀️  Brightness Up</option>
+        <option value="brightness_down">🌑  Brightness Down</option>
+        <option value="change_wallpaper">🖼  Change Wallpaper</option>
+        <option value="media_play_pause">⏯  Play / Pause</option>
+        <option value="media_next">⏭  Next Track</option>
+        <option value="media_prev">⏮  Previous Track</option>
+        <option value="screenshot">📷  Take Screenshot</option>
+        <option value="custom_command">⚙  Custom Command</option>
+      </select>
+    </div>
+
+    <div class="ctrl-params" id="paramUrl">
+      <label class="form-label">URL</label>
+      <input type="text" class="form-input" id="fUrl" placeholder="https://…" />
+    </div>
+    <div class="ctrl-params" id="paramApp">
+      <label class="form-label">App Path / Name</label>
+      <input type="text" class="form-input" id="fApp" placeholder="notepad  or  /usr/bin/firefox" />
+    </div>
+    <div class="ctrl-params" id="paramStep">
+      <label class="form-label">Step Amount (%)</label>
+      <input type="number" class="form-input" id="fStep" value="10" min="1" max="100" />
+    </div>
+    <div class="ctrl-params" id="paramWallpaper">
+      <label class="form-label">Wallpaper Folder Path</label>
+      <input type="text" class="form-input" id="fWallpaper" placeholder="C:\Users\...\Wallpapers" />
+    </div>
+    <div class="ctrl-params" id="paramCmd">
+      <label class="form-label">Shell Command</label>
+      <input type="text" class="form-input" id="fCmd" placeholder="shutdown /s /t 60" />
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveGesture()">Save Gesture</button>
+    </div>
+
+    <!-- Step 2: Record training data — shown after saving a new gesture -->
+    <div id="recordSection" style="display:none;margin-top:20px;border-top:1px solid var(--border);padding-top:20px">
+      <div class="form-label" style="margin-bottom:12px">Step 2 — Record Training Data</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:14px;line-height:1.6">
+        Camera must be on. Hold your hand gesture steady in front of the camera and click Record.
+        More frames = better accuracy (150–200 recommended).
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+        <label class="form-label" style="margin:0;white-space:nowrap">Frames to record</label>
+        <input type="number" class="form-input" id="fFrameCount" value="150" min="30" max="500"
+          style="width:90px;padding:7px 10px" />
+      </div>
+
+      <!-- Progress bar (hidden until recording starts) -->
+      <div id="recModalProgress" style="display:none;margin-bottom:14px">
+        <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-bottom:5px">
+          <span id="recModalName"></span>
+          <span id="recModalCount">0 / 0</span>
+        </div>
+        <div style="height:5px;background:var(--border);border-radius:3px;overflow:hidden">
+          <div id="recModalFill" style="height:100%;background:var(--accent2);border-radius:3px;width:0%;transition:width 0.2s"></div>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:8px">
+        <button class="train-btn primary" id="recModalBtn" onclick="startRecordingFromModal()">● Start Recording</button>
+        <button class="train-btn" id="stopRecModalBtn" onclick="stopRecording()" style="display:none">■ Stop</button>
+        <button class="train-btn primary" id="trainAfterRecBtn" onclick="triggerTrain()" style="display:none;background:var(--accent3);border-color:var(--accent3)">⚡ Train Now</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast-container" id="toastContainer"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+//  GestureOS — Frontend
+//  WebSocket bridge to server.py (ws://localhost:8765)
+// ═══════════════════════════════════════════════════════════
+
+let isRecording = false;
+let currentlyRecordingName = null;
+
+
+let gestures = [];
+try { const s = localStorage.getItem('gos_v3'); if (s) gestures = JSON.parse(s); } catch(e){}
+
+if (!gestures.length) {
+  gestures = [
+    { id:1, name:'Open Palm',    imageData:null, ctrlType:'volume_up',        param:'10',                 enabled:true  },
+    { id:2, name:'Two Fingers',  imageData:null, ctrlType:'open_webpage',     param:'https://google.com', enabled:true  },
+    { id:3, name:'Closed Fist',  imageData:null, ctrlType:'mute',             param:'',                   enabled:true  },
+    { id:4, name:'Thumbs Up',    imageData:null, ctrlType:'media_play_pause', param:'',                   enabled:false },
+    { id:5, name:'Index Up',     imageData:null, ctrlType:'brightness_up',    param:'10',                 enabled:true  },
+  ];
+}
+
+let editingId = null, pendingImg = null;
+let cameraOn = false, mediaStream = null;
+let activeGestureId = null, frameCount = 0, fps = 0, lastFpsTime = performance.now();
+
+// ── WebSocket ───────────────────────────────────────────────
+let ws = null, wsReconnectTimer = null, frameLoopId = null;
+let lastFiredGesture = '', lastFiredTime = 0;
+const FIRE_COOLDOWN_MS = 1500;
+const FRAME_INTERVAL_MS = 80;
+let lastFrameSent = 0;
+let recordTargetFrames = 150, recordCurrentFrames = 0;
+
+const CTRL = {
+  open_webpage:     {label:'Open Webpage',    icon:'🌐', color:'#00e5ff', cls:'ct-web'},
+  open_app:         {label:'Open App',        icon:'📦', color:'#a855f7', cls:'ct-app'},
+  volume_up:        {label:'Volume Up',       icon:'🔊', color:'#00ff88', cls:'ct-sound'},
+  volume_down:      {label:'Volume Down',     icon:'🔉', color:'#00ff88', cls:'ct-sound'},
+  mute:             {label:'Mute/Unmute',     icon:'🔇', color:'#00ff88', cls:'ct-sound'},
+  brightness_up:    {label:'Brightness Up',   icon:'☀️', color:'#ffb347', cls:'ct-brightness'},
+  brightness_down:  {label:'Brightness Down', icon:'🌑', color:'#ffb347', cls:'ct-brightness'},
+  change_wallpaper: {label:'Change Wallpaper',icon:'🖼', color:'#ff3d71', cls:'ct-wallpaper'},
+  media_play_pause: {label:'Play/Pause',      icon:'⏯', color:'#00ff88', cls:'ct-sound'},
+  media_next:       {label:'Next Track',      icon:'⏭', color:'#00ff88', cls:'ct-sound'},
+  media_prev:       {label:'Prev Track',      icon:'⏮', color:'#00ff88', cls:'ct-sound'},
+  screenshot:       {label:'Screenshot',      icon:'📷', color:'#00e5ff', cls:'ct-web'},
+  custom_command:   {label:'Custom Command',  icon:'⚙',  color:'#c084fc', cls:'ct-custom'},
+};
+
+// ── PERSIST ────────────────────────────────────
+function persist() {
+  localStorage.setItem('gos_v3', JSON.stringify(gestures));
+  renderGestures();
+  syncPinchMap();
+}
+
+// ── RENDER LIST ────────────────────────────────
+function thumbHTML(g) {
+  if (g.imageData) return `<img src="${g.imageData}" alt="${g.name}" />`;
+  return `<div class="thumb-placeholder">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4a6070" stroke-width="1.5">
+      <rect x="3" y="3" width="18" height="18" rx="2"/>
+      <circle cx="8.5" cy="8.5" r="1.5"/>
+      <polyline points="21,15 16,10 5,21"/>
+    </svg>
+    <span>NO IMG</span>
+  </div>`;
+}
+
+function renderGestures() {
+  const list = document.getElementById('gestureList');
+  document.getElementById('gestureCount').textContent = `${gestures.length} gesture${gestures.length!==1?'s':''}`;
+  document.getElementById('activeCount').textContent = gestures.filter(g=>g.enabled).length;
+
+  list.innerHTML = gestures.map(g => {
+    const m = CTRL[g.ctrlType] || {label:g.ctrlType, icon:'?', color:'#666', cls:''};
+    const ps = g.param ? (g.param.length>24 ? g.param.slice(0,24)+'…' : g.param) : '';
+    const isRec = isRecording && currentlyRecordingName === g.name;
+    return `
+    <div class="gesture-item ${activeGestureId===g.id?'active-gesture':''}" onclick="highlight(${g.id})">
+      <div class="gesture-thumb">${thumbHTML(g)}</div>
+      <div class="gesture-info">
+        <div class="gesture-n">${g.name}</div>
+        <div class="gesture-ctrl">
+          <span class="ctrl-dot ${m.cls}" style="background:${m.color}"></span>
+          ${m.icon} ${m.label}${ps?' · '+ps:''}
+        </div>
+      </div>
+      <div class="gesture-actions">
+        <label class="toggle-switch" onclick="event.stopPropagation()">
+          <input type="checkbox" ${g.enabled?'checked':''} onchange="toggleG(${g.id})" />
+          <div class="toggle-track"></div>
+        </label>
+        <button class="icon-btn rec-btn ${isRec?'recording-active':''}"
+          onclick="event.stopPropagation();quickRecord('${g.name.replace(/'/g,"\\'")}')"
+          title="Record training data for '${g.name}'">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="9"/></svg>
+        </button>
+        <button class="icon-btn edit-btn" onclick="event.stopPropagation();editModal(${g.id})" title="Edit">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+          </svg>
+        </button>
+        <button class="icon-btn del-btn" onclick="event.stopPropagation();deleteG(${g.id})" title="Delete">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+            <polyline points="3,6 5,6 21,6"/>
+            <path d="M19,6l-1,14a2,2,0,0,1-2,2H8a2,2,0,0,1-2-2L5,6"/>
+            <path d="M10,11v6M14,11v6M9,6V4h6v2"/>
+          </svg>
+        </button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function highlight(id) { activeGestureId = activeGestureId===id?null:id; renderGestures(); }
+function toggleG(id) { const g=gestures.find(x=>x.id===id); if(g){g.enabled=!g.enabled;persist();} }
+function deleteG(id) {
+  const g = gestures.find(x=>x.id===id);
+  if(!g) return;
+
+  if(!confirm(`Delete "${g.name}"?\n\nThis will also remove its training data and retrain the model so it is no longer recognised.`)) return;
+
+  // Remove from UI immediately
+  gestures = gestures.filter(x=>x.id!==id);
+  persist();
+
+  // Tell server: delete CSV + retrain
+  if(ws && ws.readyState===WebSocket.OPEN){
+    wsSend({ type:'delete_and_retrain', gesture_name: g.name });
+    setTrainBusy(true);
+    toast(`Deleting "${g.name}" and retraining model…`);
+  } else {
+    toast(`"${g.name}" removed from UI. Start server to sync model.`, 'error');
+  }
+}
+
+// ── MODAL ──────────────────────────────────────
+function openAddModal() {
+  editingId=null; pendingImg=null;
+  document.getElementById('modalTitle').textContent='Add Gesture';
+  document.getElementById('fName').value='';
+  document.getElementById('fCtrlType').value='';
+  resetImgUI(); hideAllParams();
+  document.getElementById('modalOverlay').classList.add('open');
+}
+
+function editModal(id) {
+  const g=gestures.find(x=>x.id===id); if(!g) return;
+  editingId=id; pendingImg=g.imageData||null;
+  document.getElementById('modalTitle').textContent='Edit Gesture';
+  document.getElementById('fName').value=g.name;
+  document.getElementById('fCtrlType').value=g.ctrlType;
+  if(g.imageData){
+    document.getElementById('imgPreviewThumb').innerHTML=`<img src="${g.imageData}"/>`;
+    document.getElementById('imgUploadTitle').textContent='Gesture image set ✓';
+    document.getElementById('imgClearBtn').style.display='inline-block';
+  } else { resetImgUI(); }
+  hideAllParams(); showParams(g.ctrlType, g.param);
+  document.getElementById('modalOverlay').classList.add('open');
+}
+
+function closeModal() {
+  document.getElementById('modalOverlay').classList.remove('open');
+  document.getElementById('fImageFile').value='';
+  // Reset record section
+  document.getElementById('recordSection').style.display='none';
+  document.querySelector('.modal-footer').style.display='flex';
+  // If recording was in progress via modal, stop it
+  if(isRecording) { wsSend({type:'record_stop'}); isRecording=false; currentlyRecordingName=null; renderGestures(); }
+}
+
+function resetImgUI() {
+  document.getElementById('imgPreviewThumb').innerHTML=`
+    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#4a6070" stroke-width="1.5">
+      <rect x="3" y="3" width="18" height="18" rx="2"/>
+      <circle cx="8.5" cy="8.5" r="1.5"/>
+      <polyline points="21,15 16,10 5,21"/>
+    </svg>`;
+  document.getElementById('imgUploadTitle').textContent='Click to upload gesture photo';
+  document.getElementById('imgClearBtn').style.display='none';
+}
+
+function onImageSelected(e) {
+  const file=e.target.files[0]; if(!file) return;
+  const reader=new FileReader();
+  reader.onload=ev=>{
+    pendingImg=ev.target.result;
+    document.getElementById('imgPreviewThumb').innerHTML=`<img src="${pendingImg}"/>`;
+    document.getElementById('imgUploadTitle').textContent=file.name;
+    document.getElementById('imgClearBtn').style.display='inline-block';
+  };
+  reader.readAsDataURL(file);
+}
+
+function clearImage(e) {
+  e.stopPropagation(); pendingImg=null; resetImgUI();
+  document.getElementById('fImageFile').value='';
+}
+
+function hideAllParams() {
+  ['paramUrl','paramApp','paramStep','paramWallpaper','paramCmd'].forEach(id=>
+    document.getElementById(id).classList.remove('visible'));
+}
+
+const PARAM_MAP = {
+  open_webpage:['paramUrl','fUrl'], open_app:['paramApp','fApp'],
+  volume_up:['paramStep','fStep'], volume_down:['paramStep','fStep'],
+  brightness_up:['paramStep','fStep'], brightness_down:['paramStep','fStep'],
+  change_wallpaper:['paramWallpaper','fWallpaper'], custom_command:['paramCmd','fCmd'],
+};
+
+function showParams(type, val='') {
+  hideAllParams();
+  if(PARAM_MAP[type]){
+    document.getElementById(PARAM_MAP[type][0]).classList.add('visible');
+    document.getElementById(PARAM_MAP[type][1]).value=val||(type.match(/volume|bright/)?'10':'');
+  }
+}
+
+function onCtrlTypeChange() { showParams(document.getElementById('fCtrlType').value); }
+
+function saveGesture() {
+  const name=document.getElementById('fName').value.trim();
+  const ctrlType=document.getElementById('fCtrlType').value;
+  if(!name){toast('Enter a gesture name','error');return;}
+  if(!ctrlType){toast('Select a control type','error');return;}
+  let param='';
+  if(PARAM_MAP[ctrlType]) param=document.getElementById(PARAM_MAP[ctrlType][1]).value.trim();
+
+  if(editingId){
+    const g=gestures.find(x=>x.id===editingId);
+    Object.assign(g,{name,ctrlType,param,imageData:pendingImg});
+    toast('Gesture updated!','success');
+    persist(); closeModal();
+  } else {
+    gestures.push({id:Date.now(),name,ctrlType,param,imageData:pendingImg,enabled:true});
+    persist();
+    // Don't close modal — show recording step instead
+    document.getElementById('modalTitle').textContent = `"${name}" saved ✓`;
+    document.getElementById('modal-sub') && (document.getElementById('modal-sub').style.display='none');
+    // Hide the save button row, show recording section
+    document.querySelector('.modal-footer').style.display='none';
+    const recSec = document.getElementById('recordSection');
+    recSec.style.display='block';
+    // Pre-fill gesture name
+    recSec.dataset.gestureName = name;
+    // Reset progress UI
+    document.getElementById('recModalProgress').style.display='none';
+    document.getElementById('recModalBtn').style.display='inline-block';
+    document.getElementById('stopRecModalBtn').style.display='none';
+    document.getElementById('trainAfterRecBtn').style.display='none';
+    document.getElementById('recModalBtn').textContent='● Start Recording';
+    document.getElementById('recModalBtn').disabled=false;
+    toast(`"${name}" added! Now record training data below.`,'success');
+  }
+}
+
+// ── PINCH MAP SYNC ─────────────────────────────────────────────
+// Tell server which gesture names use pinch (volume/brightness)
+const PINCH_CTRL_TYPES = new Set([
+  'volume_up','volume_down','brightness_up','brightness_down'
+]);
+const PINCH_MODE = {
+  'volume_up':'volume','volume_down':'volume',
+  'brightness_up':'brightness','brightness_down':'brightness'
+};
+
+function syncPinchMap() {
+  const map = {};
+  gestures.forEach(g => {
+    if(PINCH_CTRL_TYPES.has(g.ctrlType) && g.enabled){
+      map[g.name] = PINCH_MODE[g.ctrlType];
+    }
+  });
+  wsSend({ type: 'update_pinch_map', map });
+}
+
+// ── WEBSOCKET ──────────────────────────────────────────────────
+function connectWS() {
+  if (ws && (ws.readyState===WebSocket.OPEN || ws.readyState===WebSocket.CONNECTING)) return;
+  ws = new WebSocket('ws://127.0.0.1:8765');
+
+
+  ws.onopen = () => {
+    clearTimeout(wsReconnectTimer);
+    setWsStatus('connected');
+    toast('Connected to GestureOS server','success');
+    syncPinchMap();   // tell server which gestures use pinch
+  };
+  ws.onclose = () => {
+    setWsStatus('disconnected');
+    document.getElementById('modelStatus').textContent = 'Disconnected';
+    wsReconnectTimer = setTimeout(connectWS, 3000);
+  };
+  ws.onerror = () => setWsStatus('error');
+  ws.onmessage = ({data}) => {
+    try { handleServerMessage(JSON.parse(data)); } catch(e){ console.error('[WS]',e); }
+  };
+}
+
+function wsSend(obj) {
+  if (ws && ws.readyState===WebSocket.OPEN) ws.send(JSON.stringify(obj));
+}
+
+function setWsStatus(state) {
+  const dot=document.getElementById('wsDot'), text=document.getElementById('wsStatusText');
+  dot.className='ws-dot';
+  if(state==='connected'){ dot.classList.add('connected'); text.textContent='Connected'; }
+  else if(state==='error'){ dot.classList.add('error'); text.textContent='Error'; }
+  else { text.textContent='Disconnected'; }
+}
+
+function handleServerMessage(msg) {
+  switch(msg.type) {
+
+    case 'status':
+      document.getElementById('modelStatus').textContent =
+        msg.model_loaded ? `Ready — ${msg.classes.length} gestures` : 'No Model — Train first';
+      updateModelPanel(msg.classes || [], msg.model_loaded);
+      break;
+
+    case 'prediction':
+      if(!msg.hand){
+        document.getElementById('detectedGesture').textContent='—';
+        document.getElementById('detectedGesture').style.color='var(--muted)';
+        document.getElementById('handPos').textContent='No Hand';
+        document.getElementById('confBar').style.width='0%';
+        document.getElementById('confText').textContent='Confidence: 0%';
+        document.getElementById('gestureCard').classList.remove('active');
+        document.getElementById('handMeta').textContent='Status: Searching…';
+        updateCtrl(null,0);
+        break;
+      }
+      const displayName = msg.smoothed || msg.gesture || '—';
+      document.getElementById('detectedGesture').textContent = displayName;
+      document.getElementById('detectedGesture').style.color = 'var(--text)';
+      document.getElementById('handPos').textContent = `X: ${msg.hand_x||0}%  Y: ${msg.hand_y||0}%`;
+      document.getElementById('confBar').style.width = msg.confidence+'%';
+      document.getElementById('gestureCard').classList.add('active');
+      document.getElementById('handMeta').textContent = 'Status: Tracking ✓';
+
+      // Pinch controls are handled entirely server-side — don't send execute_control for them
+      if(msg.smoothed && msg.confidence>=80){
+        const g=gestures.find(x=>x.name===msg.smoothed && x.enabled);
+        if(g){
+          if(PINCH_CTRL_TYPES.has(g.ctrlType)){
+            // Pinch active — show live value from server if available
+            const pinchLabel = msg.pinch
+              ? `${msg.pinch.mode}: ${msg.pinch.value}%  · pinch`
+              : `${PINCH_MODE[g.ctrlType]} — pinch to adjust`;
+            document.getElementById('confText').textContent =
+              `Confidence: ${msg.confidence}%  · ${pinchLabel}`;
+            updateCtrl(g, msg.confidence);
+          } else {
+            // One-shot control
+            document.getElementById('confText').textContent =
+              `Confidence: ${msg.confidence}%  ${msg.smoothed?'· smoothed':'· raw'}`;
+            const now=Date.now();
+            if(g.name!==lastFiredGesture || now-lastFiredTime>FIRE_COOLDOWN_MS){
+              lastFiredGesture=g.name; lastFiredTime=now;
+              updateCtrl(g,msg.confidence);
+              wsSend({type:'execute_control', control_type:g.ctrlType, param:g.param});
+            }
+          }
+        }
+      } else {
+        document.getElementById('confText').textContent =
+          `Confidence: ${msg.confidence}%  ${msg.smoothed?'· smoothed':'· raw'}`;
+      }
+      break;
+
+    // ── Recording progress ───────────────────────────────────
+    case 'record_progress':
+      updateRecordProgress(msg.name, msg.count, msg.target);
+      break;
+
+    case 'record_done':
+      // Server saved the CSV — show train button
+      isRecording = false;
+      currentlyRecordingName = null;
+      renderGestures();
+      // Hide overlay
+      document.getElementById('recordOverlay').classList.remove('active');
+      document.getElementById('recordHud').classList.remove('active');
+      // In-modal state
+      document.getElementById('recModalBtn').style.display='none';
+      document.getElementById('stopRecModalBtn').style.display='none';
+      document.getElementById('trainAfterRecBtn').style.display='inline-block';
+      document.getElementById('recModalBtn').disabled=false;
+      toast(`✓ ${msg.frames} frames recorded for "${msg.name}". Click Train Now!`, 'success');
+      refreshDataInfo();
+      break;
+
+    case 'record_stopped':
+      isRecording = false;
+      currentlyRecordingName = null;
+      renderGestures();
+      document.getElementById('recordOverlay').classList.remove('active');
+      document.getElementById('recordHud').classList.remove('active');
+      document.getElementById('recModalBtn').textContent='● Start Recording';
+      document.getElementById('recModalBtn').disabled=false;
+      document.getElementById('recModalBtn').style.display='inline-block';
+      document.getElementById('stopRecModalBtn').style.display='none';
+      if(msg.frames>0){
+        document.getElementById('trainAfterRecBtn').style.display='inline-block';
+        toast(`Stopped — ${msg.frames} frames saved for "${msg.name}"`, 'success');
+      }
+      refreshDataInfo();
+      break;
+
+    // ── Training ─────────────────────────────────────────────
+    case 'train_started':
+      setTrainBusy(true);
+      break;
+
+    case 'train_done':
+      setTrainBusy(false);
+      document.getElementById('modelStatus').textContent=`Ready — ${msg.classes.length} gestures`;
+      updateModelPanel(msg.classes, true);
+      toast(`✓ Model trained! Accuracy: ${msg.accuracy}%  (${msg.classes.length} gestures)`, 'success');
+      // Close modal if open
+      if(document.getElementById('modalOverlay').classList.contains('open')) closeModal();
+      break;
+
+    case 'train_error':
+      setTrainBusy(false);
+      toast(msg.message, 'error');
+      break;
+
+    case 'data_info':
+      renderDataInfo(msg.data);
+      break;
+
+    case 'error':
+      toast(msg.message,'error'); break;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  TRAINING PANEL
+// ═══════════════════════════════════════════════════════════
+function updateModelPanel(classes, modelLoaded) {
+  const el = document.getElementById('modelInfoList');
+  document.getElementById('trainModelClasses').textContent =
+    modelLoaded ? `${classes.length} classes` : '';
+
+  if(!classes.length){
+    el.innerHTML='<div class="train-data-empty">No data yet — add gestures and record</div>';
+    return;
+  }
+  // Will be overwritten by refreshDataInfo with frame counts
+  el.innerHTML = classes.map(c=>`
+    <div class="train-data-row">
+      <span class="train-data-name">${c}</span>
+      <span class="train-data-count" style="color:var(--success)">✓ in model</span>
+    </div>`).join('');
+  refreshDataInfo();
+}
+
+function renderDataInfo(data) {
+  const el = document.getElementById('modelInfoList');
+  const entries = Object.entries(data);
+  if(!entries.length){
+    el.innerHTML='<div class="train-data-empty">No data yet — add gestures and record</div>';
+    return;
+  }
+  el.innerHTML = entries.map(([name, count])=>`
+    <div class="train-data-row">
+      <span class="train-data-name">${name}</span>
+      <span style="display:flex;align-items:center;gap:6px">
+        <span class="train-data-count">${count} frames</span>
+        ${count >= 30
+          ? '<span style="color:var(--success);font-size:9px">✓</span>'
+          : '<span style="color:var(--accent2);font-size:9px">need more</span>'}
+      </span>
+    </div>`).join('');
+}
+
+function refreshDataInfo() { wsSend({type:'get_data_info'}); }
+
+function setTrainBusy(busy) {
+  const btn = document.getElementById('trainBtn');
+  const status = document.getElementById('trainStatus');
+  if(busy){
+    btn.disabled=true; btn.textContent='⏳ Training…';
+    status.style.display='block'; status.textContent='Running train_model.py…';
+  } else {
+    btn.disabled=false; btn.textContent='⚡ Train Model';
+    status.style.display='none';
+  }
+}
+
+function triggerTrain() {
+  if(!ws||ws.readyState!==WebSocket.OPEN){ toast('Not connected to server','error'); return; }
+  wsSend({type:'train_model'});
+  setTrainBusy(true);
+  toast('Training started — this may take 30–60 seconds…');
+}
+
+// ═══════════════════════════════════════════════════════════
+//  RECORDING
+// ═══════════════════════════════════════════════════════════
+
+// Called from the red ● button next to each gesture in the list
+function quickRecord(gestureName) {
+  if(!cameraOn){ toast('Start camera first','error'); return; }
+  if(!ws||ws.readyState!==WebSocket.OPEN){ toast('Server not connected','error'); return; }
+  if(isRecording){ toast('Already recording — stop first','error'); return; }
+
+  const frames = parseInt(prompt(
+    `Record training data for: "${gestureName}"\n\nFrames to record (150–200 recommended):`, '150'
+  ));
+  if(isNaN(frames)||frames<30){ toast('Minimum 30 frames required','error'); return; }
+
+  beginRecording(gestureName, frames);
+}
+
+// Called from the modal's Record button
+function startRecordingFromModal() {
+  if(!cameraOn){ toast('Start camera first — then come back','error'); return; }
+  if(!ws||ws.readyState!==WebSocket.OPEN){ toast('Server not connected','error'); return; }
+  if(isRecording){ toast('Already recording','error'); return; }
+
+  const gestureName = document.getElementById('recordSection').dataset.gestureName;
+  const frames = parseInt(document.getElementById('fFrameCount').value) || 150;
+
+  if(!gestureName){ toast('No gesture name found','error'); return; }
+
+  // Update modal UI to recording state
+  document.getElementById('recModalBtn').style.display='none';
+  document.getElementById('stopRecModalBtn').style.display='inline-block';
+  document.getElementById('trainAfterRecBtn').style.display='none';
+  document.getElementById('recModalProgress').style.display='block';
+  document.getElementById('recModalName').textContent=`Recording: ${gestureName}`;
+  document.getElementById('recModalCount').textContent=`0 / ${frames}`;
+  document.getElementById('recModalFill').style.width='0%';
+
+  beginRecording(gestureName, frames);
+}
+
+function beginRecording(gestureName, frames) {
+  isRecording = true;
+  currentlyRecordingName = gestureName;
+  recordTargetFrames = frames;
+  recordCurrentFrames = 0;
+
+  wsSend({ type:'record_start', gesture_name: gestureName, frame_count: frames });
+
+  // Show camera overlay
+  document.getElementById('recordOverlay').classList.add('active');
+  document.getElementById('recordHud').classList.add('active');
+  document.getElementById('recHudName').textContent = `● ${gestureName}`;
+  document.getElementById('recHudCount').textContent = `0 / ${frames}`;
+  document.getElementById('recProgressFill').style.width = '0%';
+
+  renderGestures();
+  toast(`Recording "${gestureName}" — hold gesture steady!`);
+}
+
+function stopRecording() {
+  if(!isRecording) return;
+  wsSend({ type:'record_stop' });
+}
+
+function updateRecordProgress(name, count, target) {
+  const pct = Math.round((count/target)*100);
+
+  // Camera HUD
+  document.getElementById('recHudCount').textContent = `${count} / ${target}`;
+  document.getElementById('recProgressFill').style.width = pct+'%';
+
+  // Modal progress (if open)
+  if(document.getElementById('recModalProgress').style.display!=='none'){
+    document.getElementById('recModalCount').textContent = `${count} / ${target}`;
+    document.getElementById('recModalFill').style.width = pct+'%';
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  CAMERA + FRAME LOOP
+// ═══════════════════════════════════════════════════════════
+async function toggleCamera() { cameraOn ? stopCamera() : await startCamera(); }
+
+async function startCamera() {
+  try {
+    mediaStream=await navigator.mediaDevices.getUserMedia({video:{width:640,height:480}});
+    const video=document.getElementById('videoEl');
+    video.srcObject=mediaStream;
+    await video.play();
+    cameraOn=true;
+    document.getElementById('toggleCamBtn').textContent='Stop Camera';
+    document.getElementById('camOffOverlay').style.display='none';
+    document.getElementById('scanLine').style.display='block';
+    document.getElementById('camRec').style.display='flex';
+    document.getElementById('camLabel').textContent='GESTURE DETECTION ACTIVE';
+    document.getElementById('camStatusDot').classList.add('live');
+    document.getElementById('camStatusText').textContent='Camera Live';
+    document.getElementById('handMeta').textContent='Status: Searching…';
+    toast('Camera started','success');
+    startFrameLoop();
+  } catch(e){ toast('Camera error: '+e.message,'error'); }
+}
+
+function stopCamera() {
+  cancelAnimationFrame(frameLoopId); frameLoopId=null;
+  if(mediaStream) mediaStream.getTracks().forEach(t=>t.stop());
+  cameraOn=false; mediaStream=null;
+  document.getElementById('videoEl').srcObject=null;
+  document.getElementById('toggleCamBtn').textContent='Start Camera';
+  document.getElementById('camOffOverlay').style.display='flex';
+  document.getElementById('scanLine').style.display='none';
+  document.getElementById('camRec').style.display='none';
+  document.getElementById('camLabel').textContent='AWAITING CAMERA';
+  document.getElementById('camStatusDot').classList.remove('live');
+  document.getElementById('camStatusText').textContent='Camera Off';
+  document.getElementById('detectedGesture').textContent='—';
+  document.getElementById('detectedGesture').style.color='var(--muted)';
+  document.getElementById('confBar').style.width='0%';
+  document.getElementById('confText').textContent='Confidence: 0%';
+  document.getElementById('handPos').textContent='No Hand';
+  document.getElementById('handMeta').textContent='Status: Waiting';
+  document.getElementById('camFps').textContent='';
+  updateCtrl(null,0);
+}
+
+function startFrameLoop() {
+  const video=document.getElementById('videoEl');
+  const canvas=document.getElementById('captureCanvas');
+  const ctx=canvas.getContext('2d');
+
+  function loop() {
+    if(!cameraOn) return;
+    frameLoopId=requestAnimationFrame(loop);
+
+    // FPS counter
+    frameCount++;
+    const now=performance.now();
+    if(now-lastFpsTime>1000){
+      fps=Math.round(frameCount*1000/(now-lastFpsTime));
+      frameCount=0; lastFpsTime=now;
+      document.getElementById('camFps').textContent=fps+' FPS';
+    }
+
+    // Throttle frames to server
+    if(now-lastFrameSent < FRAME_INTERVAL_MS) return;
+    if(!ws || ws.readyState!==WebSocket.OPEN) return;
+    if(video.readyState < 2) return;
+
+    lastFrameSent=now;
+    canvas.width=video.videoWidth||640;
+    canvas.height=video.videoHeight||480;
+
+    // Draw mirrored frame (matches what user sees)
+    ctx.save();
+    ctx.translate(canvas.width,0);
+    ctx.scale(-1,1);
+    ctx.drawImage(video,0,0,canvas.width,canvas.height);
+    ctx.restore();
+
+    wsSend({type:'frame', data: canvas.toDataURL('image/jpeg',0.6)});
+  }
+
+  requestAnimationFrame(loop);
+}
+
+// ═══════════════════════════════════════════════════════════
+//  CONTROL DISPLAY
+// ═══════════════════════════════════════════════════════════
+function updateCtrl(g, conf) {
+  const trigger=document.getElementById('controlTrigger');
+  const iconBox=document.getElementById('ctrlIconBox');
+  const nameEl=document.getElementById('ctrlName');
+  const descEl=document.getElementById('ctrlDesc');
+  const statEl=document.getElementById('ctrlStatus');
+  const lastEl=document.getElementById('lastTrigger');
+
+  if(!g){
+    trigger.classList.remove('firing');
+    iconBox.innerHTML=`<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#4a6070" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>`;
+    nameEl.textContent='No Action';
+    descEl.textContent='Waiting for gesture detection…';
+    statEl.className='ctrl-status-badge idle'; statEl.textContent='IDLE';
+    return;
+  }
+
+  const m=CTRL[g.ctrlType]||{label:g.ctrlType,icon:'⚙'};
+  const ps=g.param?(g.param.length>36?g.param.slice(0,36)+'…':g.param):'';
+  trigger.classList.add('firing');
+  iconBox.innerHTML=g.imageData ? `<img src="${g.imageData}" alt="${g.name}"/>` : `<span style="font-size:22px">${m.icon}</span>`;
+  nameEl.textContent=m.label+(ps?' → '+ps:'');
+  descEl.textContent=`"${g.name}" detected at ${conf}% confidence`;
+  statEl.className='ctrl-status-badge firing'; statEl.textContent='FIRING';
+  lastEl.textContent=g.name;
+  setTimeout(()=>{ trigger.classList.remove('firing'); statEl.className='ctrl-status-badge idle'; statEl.textContent='EXECUTED'; },900);
+}
+
+// ── TOAST ──────────────────────────────────────
+function toast(msg, type='info') {
+  const c=document.getElementById('toastContainer');
+  const t=document.createElement('div');
+  t.className=`toast ${type}`;
+  t.innerHTML=`<span>${type==='success'?'✓':type==='error'?'✕':'ℹ'}</span>${msg}`;
+  c.appendChild(t);
+  setTimeout(()=>{ t.style.transition='opacity 0.3s'; t.style.opacity='0'; setTimeout(()=>t.remove(),300); },3500);
+}
+
+// ── INIT ───────────────────────────────────────
+renderGestures();
+connectWS();
+</script>
+</body>
+</html>
